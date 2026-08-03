@@ -195,7 +195,7 @@ app.post('/api/splash/chat', async (req, res) => {
     const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
 
     // Valid production Gemini models in Google AI Studio
-    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
     let replyText = '';
 
     for (const modelName of modelsToTry) {
