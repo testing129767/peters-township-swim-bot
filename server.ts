@@ -4,24 +4,45 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { TEAM_INFO, SWIM_GROUPS, UPCOMING_MEETS, INITIAL_VOLUNTEER_SHIFTS, COACHES } from './src/data/teamData.js';
 
-// process.cwd() ALWAYS points to the top-level repository folder (/opt/render/project/src)
 const currentDir = process.cwd();
-
 const app = express();
 app.use(express.json());
 
-// Render sets process.env.PORT dynamically for web services
 const PORT = process.env.PORT || 3000;
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || '',
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
-});
+// ============================================================================
+// GOOGLE CLOUD VERTEX AI INITIALIZATION
+// ============================================================================
+let ai: GoogleGenAI;
+
+// 1. If JSON credentials exist, write them so google-auth-library can discover them
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+  try {
+    const creds = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+    
+    // Initialize GoogleGenAI with Enterprise / Vertex AI mode
+    ai = new GoogleGenAI({
+      enterprise: true,
+      project: creds.project_id,
+      location: 'us-central1', // Default Vertex AI region
+      googleAuthOptions: {
+        credentials: {
+          client_email: creds.client_email,
+          private_key: creds.private_key,
+        },
+      },
+    });
+    console.log(`✅ Successfully initialized Vertex AI for project: ${creds.project_id}`);
+  } catch (err) {
+    console.error('❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:', err);
+    // Fallback to API Key mode if JSON parsing fails
+    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+  }
+} else {
+  // 2. Default API key fallback (AI Studio mode)
+  console.log('ℹ️ GOOGLE_APPLICATION_CREDENTIALS_JSON not found. Falling back to GEMINI_API_KEY.');
+  ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+}
 
 // In-memory state for volunteer shifts
 let volunteerShifts = [...INITIAL_VOLUNTEER_SHIFTS];
@@ -32,11 +53,11 @@ const OFFICIAL_WEBSITE_URL = 'https://sites.google.com/view/peters-township-swim
 
 let cachedDocText = '';
 let lastFetchTime = 0;
-const CACHE_TTL_MS = 60 * 1000; // 1 minute cache
+const CACHE_TTL_MS = 60 * 1000;
 
 let cachedWebsiteText = '';
 let lastWebsiteFetchTime = 0;
-const WEBSITE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minute cache
+const WEBSITE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function decodeHtmlEntities(str: string): string {
   return str
@@ -168,14 +189,6 @@ app.post('/api/splash/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message text is required.' });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      console.warn('GEMINI_API_KEY is missing from process.env');
-      return res.json({
-        reply: getGroundedFallbackAnswer(message),
-        suggestedFollowups: ['When are tryouts?', 'What are the practice schedules?'],
-      });
-    }
-
     const contents: any[] = [];
     if (Array.isArray(history)) {
       for (const item of history) {
@@ -195,13 +208,13 @@ app.post('/api/splash/chat', async (req, res) => {
     const liveWebsiteText = await getLiveWebsiteInfo();
     const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
 
-    // Tested, production-ready Gemini models for Google AI Studio
+    // Tested Vertex AI model names
     const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
     let replyText = '';
 
     for (const modelName of modelsToTry) {
       try {
-        console.log(`Attempting Gemini model: ${modelName}`);
+        console.log(`Attempting Gemini call on Vertex AI with model: ${modelName}`);
         const response = await ai.models.generateContent({
           model: modelName,
           contents: contents,
@@ -213,16 +226,16 @@ app.post('/api/splash/chat', async (req, res) => {
 
         if (response && response.text) {
           replyText = response.text;
-          console.log(`Successfully generated response using model: ${modelName}`);
+          console.log(` Successfully generated response using model: ${modelName}`);
           break;
         }
       } catch (err: any) {
-        console.warn(`Gemini model '${modelName}' failed, trying next fallback...`, err?.message || err);
+        console.warn(`Vertex AI model '${modelName}' failed, trying next fallback...`, err?.message || err);
       }
     }
 
     if (!replyText) {
-      console.warn('All models failed or returned empty responses. Serving fallback.');
+      console.warn('All Vertex AI models failed. Serving grounded fallback.');
       replyText = getGroundedFallbackAnswer(message);
     }
 
@@ -248,7 +261,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Correct absolute path using process.cwd()
     const distPath = path.resolve(currentDir, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
