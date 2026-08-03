@@ -10,7 +10,7 @@ const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 const app = express();
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({
@@ -355,7 +355,7 @@ app.post('/api/splash/chat', async (req, res) => {
     const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
 
     // Try models in order of preference to handle transient high demand / 503 errors smoothly
-    const modelsToTry = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
     let replyText = '';
 
     for (const modelName of modelsToTry) {
@@ -414,7 +414,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, 'dist');
+    const distPath = path.resolve(currentDir, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
