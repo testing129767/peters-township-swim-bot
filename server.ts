@@ -45,7 +45,7 @@ function decodeHtmlEntities(str: string): string {
     .replace(/</g, '<')
     .replace(/>/g, '>')
     .replace(/'/g, "'")
-    .replace(/ /g, ' ')
+    .replace(/ /g, ' ')
     .replace(/“/g, '"')
     .replace(/”/g, '"')
     .replace(/–/g, '-')
@@ -62,7 +62,7 @@ FACILITY & HOME POOL:
 - Address: Peters Township High School, 121 Rolling Hills Drive, McMurray, PA 15317
 `;
 
-async function getLiveDocInfo(): Promise {
+async function getLiveDocInfo(): Promise<string> {
   const now = Date.now();
   if (cachedDocText && now - lastFetchTime < CACHE_TTL_MS) {
     return cachedDocText;
@@ -85,7 +85,7 @@ async function getLiveDocInfo(): Promise {
   return cachedDocText;
 }
 
-async function getLiveWebsiteInfo(): Promise {
+async function getLiveWebsiteInfo(): Promise<string> {
   const now = Date.now();
   if (cachedWebsiteText && now - lastWebsiteFetchTime < WEBSITE_CACHE_TTL_MS) {
     return cachedWebsiteText;
@@ -169,6 +169,7 @@ app.post('/api/splash/chat', async (req, res) => {
     }
 
     if (!process.env.GEMINI_API_KEY) {
+      console.warn('GEMINI_API_KEY is missing from process.env');
       return res.json({
         reply: getGroundedFallbackAnswer(message),
         suggestedFollowups: ['When are tryouts?', 'What are the practice schedules?'],
@@ -194,12 +195,13 @@ app.post('/api/splash/chat', async (req, res) => {
     const liveWebsiteText = await getLiveWebsiteInfo();
     const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
 
-    // Valid production Gemini models in Google AI Studio
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+    // Tested, production-ready Gemini models for Google AI Studio
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
     let replyText = '';
 
     for (const modelName of modelsToTry) {
       try {
+        console.log(`Attempting Gemini model: ${modelName}`);
         const response = await ai.models.generateContent({
           model: modelName,
           contents: contents,
@@ -208,8 +210,10 @@ app.post('/api/splash/chat', async (req, res) => {
             temperature: 0.7,
           },
         });
-        if (response.text) {
+
+        if (response && response.text) {
           replyText = response.text;
+          console.log(`Successfully generated response using model: ${modelName}`);
           break;
         }
       } catch (err: any) {
@@ -218,6 +222,7 @@ app.post('/api/splash/chat', async (req, res) => {
     }
 
     if (!replyText) {
+      console.warn('All models failed or returned empty responses. Serving fallback.');
       replyText = getGroundedFallbackAnswer(message);
     }
 
