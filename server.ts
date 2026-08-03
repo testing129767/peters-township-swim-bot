@@ -209,7 +209,7 @@ app.post('/api/splash/chat', async (req, res) => {
     const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
 
     // Tested Vertex AI model names
-   const modelsToTry = ['gemini-1.5-flash-001', 'gemini-1.5-flash-002', 'gemini-1.5-pro-001'];
+   const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'];
     let replyText = '';
 
     for (const modelName of modelsToTry) {
