@@ -206,11 +206,10 @@ app.post('/api/splash/chat', async (req, res) => {
     const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
 
     // Standard short model identifiers (SDK prepends publisher paths automatically in enterprise mode)
-   const modelsToTry = [
-  'publishers/google/models/gemini-1.5-flash',
-  'publishers/google/models/gemini-1.5-pro',
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
+const modelsToTry = [
+  'gemini-1.5-flash-002',
+  'gemini-1.5-flash-001',
+  'gemini-1.5-flash'
 ];
     let replyText = '';
 
