@@ -1,0 +1,6 @@
+{
+  "name": "Peters Township Swim and Dive Team",
+  "description": "Official AI Assistant for the Peters Township Swim and Dive Team.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
