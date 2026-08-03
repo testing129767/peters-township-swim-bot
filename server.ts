@@ -11,38 +11,18 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// GOOGLE CLOUD VERTEX AI INITIALIZATION
+// GOOGLE AI STUDIO INITIALIZATION (FREE TIER)
 // ============================================================================
-let ai: GoogleGenAI;
+// Initialize standard Google AI Studio client directly using your GEMINI_API_KEY.
+// This bypasses Vertex AI enterprise project locks and grants 1,500 free requests/day.
+const apiKey = process.env.GEMINI_API_KEY || '';
 
-// 1. If JSON credentials exist, write them so google-auth-library can discover them
-if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-  try {
-    const creds = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-    
-    // Initialize GoogleGenAI with Enterprise / Vertex AI mode
-    ai = new GoogleGenAI({
-      enterprise: true,
-      project: creds.project_id,
-      location: 'us-central1', // Default Vertex AI region
-      googleAuthOptions: {
-        credentials: {
-          client_email: creds.client_email,
-          private_key: creds.private_key,
-        },
-      },
-    });
-    console.log(`✅ Successfully initialized Vertex AI for project: ${creds.project_id}`);
-  } catch (err) {
-    console.error('❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:', err);
-    // Fallback to API Key mode if JSON parsing fails
-    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-  }
-} else {
-  // 2. Default API key fallback (AI Studio mode)
-  console.log('ℹ️ GOOGLE_APPLICATION_CREDENTIALS_JSON not found. Falling back to GEMINI_API_KEY.');
-  ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+if (!apiKey) {
+  console.warn('⚠️ GEMINI_API_KEY environment variable is not set!');
 }
+
+const ai = new GoogleGenAI({ apiKey });
+console.log('✅ Successfully initialized Google AI Studio client.');
 
 // In-memory state for volunteer shifts
 let volunteerShifts = [...INITIAL_VOLUNTEER_SHIFTS];
@@ -208,13 +188,13 @@ app.post('/api/splash/chat', async (req, res) => {
     const liveWebsiteText = await getLiveWebsiteInfo();
     const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
 
-    // Tested Vertex AI model names
-   const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'];
+    // Standard Gemini models supported on Google AI Studio Free Tier
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'];
     let replyText = '';
 
     for (const modelName of modelsToTry) {
       try {
-        console.log(`Attempting Gemini call on Vertex AI with model: ${modelName}`);
+        console.log(`Attempting Gemini model: ${modelName}`);
         const response = await ai.models.generateContent({
           model: modelName,
           contents: contents,
@@ -226,16 +206,16 @@ app.post('/api/splash/chat', async (req, res) => {
 
         if (response && response.text) {
           replyText = response.text;
-          console.log(` Successfully generated response using model: ${modelName}`);
+          console.log(`✅ Successfully generated response using model: ${modelName}`);
           break;
         }
       } catch (err: any) {
-        console.warn(`Vertex AI model '${modelName}' failed, trying next fallback...`, err?.message || err);
+        console.warn(`Gemini model '${modelName}' failed, trying next fallback...`, err?.message || err);
       }
     }
 
     if (!replyText) {
-      console.warn('All Vertex AI models failed. Serving grounded fallback.');
+      console.warn('All Gemini models failed. Serving grounded fallback.');
       replyText = getGroundedFallbackAnswer(message);
     }
 
