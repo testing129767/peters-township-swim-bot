@@ -181,8 +181,8 @@ app.post('/api/splash/chat', async (req, res) => {
 
     let replyText = '';
 
-    // Array of model aliases to try sequentially in Google AI Studio
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash-002'];
+    // Updated active free-tier model list
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash'];
 
     for (const modelName of modelsToTry) {
       try {
@@ -197,7 +197,7 @@ app.post('/api/splash/chat', async (req, res) => {
         });
 
         if (response && response.text) {
-          replyText = response.text;
+          replyTest = response.text;
           console.log(`✅ Successfully generated response using ${modelName}!`);
           break; // Exit loop on success
         }
