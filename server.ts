@@ -11,9 +11,19 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// GOOGLE AI STUDIO INITIALIZATION (FREE TIER)
+// GOOGLE CLOUD VERTEX AI INITIALIZATION ($300 FREE TRIAL CREDITS)
 // ============================================================================
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+// When running on Google Cloud / Vertex AI, we initialize using your project ID and location.
+// If GOOGLE_APPLICATION_CREDENTIALS_JSON is provided as an env var, we parse it for authentication.
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+}
+
+const ai = new GoogleGenAI({
+  vertexAI: true,
+  project: process.env.GOOGLE_CLOUD_PROJECT || 'pt-swim-bot-vertex',
+  location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
+});
 
 // In-memory state for volunteer shifts
 let volunteerShifts = [...INITIAL_VOLUNTEER_SHIFTS];
@@ -181,29 +191,23 @@ app.post('/api/splash/chat', async (req, res) => {
 
     let replyText = '';
 
-    // Updated active free-tier model list
-    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+    try {
+      console.log('Attempting Vertex AI call with project: pt-swim-bot-vertex...');
+      const response = await ai.models.generateContent({
+        model: 'gemini-1.5-flash',
+        contents: contents,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.7,
+        },
+      });
 
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`Attempting Gemini call on Google AI Studio with model: ${modelName}`);
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: contents,
-          config: {
-            systemInstruction: systemPrompt,
-            temperature: 0.7,
-          },
-        });
-
-        if (response && response.text) {
-          replyTest = response.text;
-          console.log(`✅ Successfully generated response using ${modelName}!`);
-          break; // Exit loop on success
-        }
-      } catch (err: any) {
-        console.warn(`Notice for model ${modelName}:`, err?.message || err);
+      if (response && response.text) {
+        replyText = response.text;
+        console.log('✅ Successfully generated Vertex AI response!');
       }
+    } catch (err: any) {
+      console.error('❌ Vertex AI model call failed:', err?.message || err);
     }
 
     if (!replyText) {
