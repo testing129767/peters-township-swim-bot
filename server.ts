@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 3000;
 // ============================================================================
 // GOOGLE AI STUDIO INITIALIZATION (FREE TIER)
 // ============================================================================
-// Initializes using only GEMINI_API_KEY from your Render environment variables.
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 // In-memory state for volunteer shifts
