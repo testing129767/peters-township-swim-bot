@@ -11,35 +11,10 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// GOOGLE CLOUD VERTEX AI INITIALIZATION (ENTERPRISE MODE)
+// GOOGLE AI STUDIO INITIALIZATION (FREE TIER)
 // ============================================================================
-let ai: GoogleGenAI;
-
-if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-  try {
-    const creds = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-    
-    // Initialize GoogleGenAI with Enterprise / Vertex AI mode
-    ai = new GoogleGenAI({
-      enterprise: true,
-      project: creds.project_id || 'gen-lang-client-0285824685',
-      location: 'us-central1',
-      googleAuthOptions: {
-        credentials: {
-          client_email: creds.client_email,
-          private_key: creds.private_key,
-        },
-      },
-    });
-    console.log(`✅ Successfully initialized Vertex AI for project: ${creds.project_id}`);
-  } catch (err) {
-    console.error('❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:', err);
-    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-  }
-} else {
-  console.log('ℹ️ GOOGLE_APPLICATION_CREDENTIALS_JSON missing. Falling back to GEMINI_API_KEY.');
-  ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-}
+// We only use the GEMINI_API_KEY now. No more Google Cloud/Vertex AI complexity!
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 // In-memory state for volunteer shifts
 let volunteerShifts = [...INITIAL_VOLUNTEER_SHIFTS];
@@ -205,38 +180,30 @@ app.post('/api/splash/chat', async (req, res) => {
     const liveWebsiteText = await getLiveWebsiteInfo();
     const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
 
-    // Standard short model identifiers (SDK prepends publisher paths automatically in enterprise mode)
-const modelsToTry = [
-  'gemini-1.5-flash-002',
-  'gemini-1.5-flash-001',
-  'gemini-1.5-flash'
-];
     let replyText = '';
 
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`Attempting Gemini call on Vertex AI with model: ${modelName}`);
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: contents,
-          config: {
-            systemInstruction: systemPrompt,
-            temperature: 0.7,
-          },
-        });
+    try {
+      console.log('Attempting Gemini call on AI Studio with model: gemini-1.5-flash');
+      const response = await ai.models.generateContent({
+        model: 'gemini-1.5-flash',
+        contents: contents,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.7,
+        },
+      });
 
-        if (response && response.text) {
-          replyText = response.text;
-          console.log(`✅ Successfully generated Vertex AI response using model: ${modelName}`);
-          break;
-        }
-      } catch (err: any) {
-        console.warn(`Vertex AI model '${modelName}' failed, trying next fallback...`, err?.message || err);
+      if (response && response.text) {
+        replyText = response.text;
+        console.log('✅ Successfully generated AI Studio response!');
       }
+    } catch (err: any) {
+      console.error('❌ AI Studio model call failed:', err?.message || err);
     }
 
+    // If AI Studio fails for any reason, serve the fallback safely
     if (!replyText) {
-      console.warn('All Vertex AI models failed. Serving grounded fallback.');
+      console.warn('Serving grounded fallback.');
       replyText = getGroundedFallbackAnswer(message);
     }
 
