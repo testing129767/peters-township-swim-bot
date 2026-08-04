@@ -18,30 +18,37 @@ let ai: GoogleGenAI;
 
 if (!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
   console.error('❌ CRITICAL ERROR: GOOGLE_APPLICATION_CREDENTIALS_JSON is missing in Render!');
-  process.exit(1); // Stop the server if credentials are missing
+  process.exit(1);
 }
 
 try {
-  // 1. Parse the JSON to ensure it is valid and get the project ID
+  // 1. Parse the JSON credentials
   const creds = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+  const projectId = creds.project_id || 'pt-swim-bot-vertex';
   
-  // 2. Create a temporary physical file on the Render server for the SDK to find
+  // 2. The Ephemeral File Hack (Satisfies Google Cloud's physical file requirement)
   const keyPath = path.join(process.cwd(), 'google-credentials.json');
   fs.writeFileSync(keyPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-  
-  // 3. Tell the Google Cloud environment exactly where this file is
   process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
 
-  // 4. Initialize the SDK - it will now automatically find the file!
+  // 3. The Belt-and-Suspenders Environment Variables 
+  // Forces the SDK to see the project and location natively
+  process.env.GOOGLE_CLOUD_PROJECT = projectId;
+  process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
+
+  // 4. Initialize the SDK with root-level and nested properties
+  // This satisfies all versions of the @google/genai SDK
   ai = new GoogleGenAI({
+    project: projectId,
+    location: 'us-central1',
     vertexai: {
-      project: creds.project_id || 'pt-swim-bot-vertex',
+      project: projectId,
       location: 'us-central1'
     }
   });
-  console.log(`✅ Successfully connected to Google Cloud for project: ${creds.project_id}`);
+  console.log(`✅ Successfully connected to Google Cloud for project: ${projectId}`);
 } catch (err) {
-  console.error('❌ Failed to initialize Google Cloud Auth. Check your Render variables.', err);
+  console.error('❌ Failed to initialize Google Cloud Auth.', err);
   process.exit(1);
 }
 
@@ -126,7 +133,6 @@ app.post('/api/splash/chat', async (req, res) => {
     
     console.log('Attempting Google Cloud call with model: gemini-1.5-flash-002');
     
-    // Clean, direct call with the strict versioned model name
     const response = await ai.models.generateContent({
       model: 'gemini-1.5-flash-002',
       contents: contents,
