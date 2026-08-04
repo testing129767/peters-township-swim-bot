@@ -23,11 +23,17 @@ if (!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
 try {
   const creds = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
   
-  // The SDK still requires the "vertexai" key to route to the Agent Platform
   ai = new GoogleGenAI({
     vertexai: {
       project: creds.project_id || 'pt-swim-bot-vertex',
       location: 'us-central1'
+    },
+    // We must manually hand the parsed keys to the SDK here!
+    googleAuthOptions: {
+      credentials: {
+        client_email: creds.client_email,
+        private_key: creds.private_key,
+      }
     }
   });
   console.log(`✅ Successfully connected to Google Cloud for project: ${creds.project_id}`);
