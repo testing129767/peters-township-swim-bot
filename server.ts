@@ -11,16 +11,17 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// GOOGLE CLOUD VERTEX AI INITIALIZATION ($300 FREE TRIAL CREDITS)
+// INITIALIZATION
 // ============================================================================
+// If GOOGLE_APPLICATION_CREDENTIALS_JSON is provided, write it or map it 
+// so Google Cloud SDKs pick it up automatically.
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
   process.env.GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
 }
 
-const ai = new GoogleGenAI({
-  vertexAI: true,
-  project: process.env.GOOGLE_CLOUD_PROJECT || 'pt-swim-bot-vertex',
-  location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
+// Clean initialization using GEMINI_API_KEY if available, falling back to standard client
+const ai = new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY || '' 
 });
 
 // In-memory state for volunteer shifts
@@ -190,7 +191,7 @@ app.post('/api/splash/chat', async (req, res) => {
     let replyText = '';
 
     try {
-      console.log('Attempting Vertex AI call with project: pt-swim-bot-vertex...');
+      console.log('Attempting Gemini call...');
       const response = await ai.models.generateContent({
         model: 'gemini-1.5-flash',
         contents: contents,
@@ -202,10 +203,10 @@ app.post('/api/splash/chat', async (req, res) => {
 
       if (response && response.text) {
         replyText = response.text;
-        console.log('✅ Successfully generated Vertex AI response!');
+        console.log('✅ Successfully generated response!');
       }
     } catch (err: any) {
-      console.error('❌ Vertex AI model call failed:', err?.message || err);
+      console.error('❌ Model call failed:', err?.message || err);
     }
 
     if (!replyText) {
