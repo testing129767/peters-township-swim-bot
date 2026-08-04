@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { TEAM_INFO, SWIM_GROUPS, UPCOMING_MEETS, INITIAL_VOLUNTEER_SHIFTS, COACHES } from './src/data/teamData.js';
@@ -21,24 +22,26 @@ if (!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
 }
 
 try {
+  // 1. Parse the JSON to ensure it is valid and get the project ID
   const creds = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
   
+  // 2. Create a temporary physical file on the Render server for the SDK to find
+  const keyPath = path.join(process.cwd(), 'google-credentials.json');
+  fs.writeFileSync(keyPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+  
+  // 3. Tell the Google Cloud environment exactly where this file is
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
+
+  // 4. Initialize the SDK - it will now automatically find the file!
   ai = new GoogleGenAI({
     vertexai: {
       project: creds.project_id || 'pt-swim-bot-vertex',
       location: 'us-central1'
-    },
-    // We must manually hand the parsed keys to the SDK here!
-    googleAuthOptions: {
-      credentials: {
-        client_email: creds.client_email,
-        private_key: creds.private_key,
-      }
     }
   });
   console.log(`✅ Successfully connected to Google Cloud for project: ${creds.project_id}`);
 } catch (err) {
-  console.error('❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON. Check your Render variables.', err);
+  console.error('❌ Failed to initialize Google Cloud Auth. Check your Render variables.', err);
   process.exit(1);
 }
 
@@ -68,7 +71,6 @@ FACILITY & HOME POOL: Bud Baer Natatorium, 121 Rolling Hills Drive, McMurray, PA
 `;
 
 async function getLiveDocInfo(): Promise<string> {
-  // Simplified fetch logic for brevity
   const now = Date.now();
   if (cachedDocText && now - lastFetchTime < CACHE_TTL_MS) return cachedDocText;
   try {
@@ -146,6 +148,11 @@ app.post('/api/splash/chat', async (req, res) => {
       suggestedFollowups: ['Try again'],
     });
   }
+});
+
+// Volunteer API Endpoint
+app.get('/api/volunteers', (req, res) => {
+  res.json({ shifts: volunteerShifts });
 });
 
 async function startServer() {
