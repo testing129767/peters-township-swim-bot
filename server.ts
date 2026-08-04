@@ -11,10 +11,30 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// GOOGLE AI STUDIO INITIALIZATION (FREE TIER)
+// GOOGLE CLOUD (AGENT PLATFORM) INITIALIZATION
 // ============================================================================
-// We only use the GEMINI_API_KEY now. No more Google Cloud/Vertex AI complexity!
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+let ai: GoogleGenAI;
+
+if (!process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+  console.error('❌ CRITICAL ERROR: GOOGLE_APPLICATION_CREDENTIALS_JSON is missing in Render!');
+  process.exit(1); // Stop the server if credentials are missing
+}
+
+try {
+  const creds = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+  
+  // The SDK still requires the "vertexai" key to route to the Agent Platform
+  ai = new GoogleGenAI({
+    vertexai: {
+      project: creds.project_id || 'pt-swim-bot-vertex',
+      location: 'us-central1'
+    }
+  });
+  console.log(`✅ Successfully connected to Google Cloud for project: ${creds.project_id}`);
+} catch (err) {
+  console.error('❌ Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON. Check your Render variables.', err);
+  process.exit(1);
+}
 
 // In-memory state for volunteer shifts
 let volunteerShifts = [...INITIAL_VOLUNTEER_SHIFTS];
@@ -32,213 +52,106 @@ let lastWebsiteFetchTime = 0;
 const WEBSITE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function decodeHtmlEntities(str: string): string {
-  return str
-    .replace(/&/g, '&')
-    .replace(/"/g, '"')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/'/g, "'")
-    .replace(/ /g, ' ')
-    .replace(/“/g, '"')
-    .replace(/”/g, '"')
-    .replace(/–/g, '-')
-    .replace(/—/g, '-');
+  return str.replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
 }
 
 const STATIC_WEBSITE_CONTENT = `
 Peters Township Swim & Dive | Official Site
 URL: https://sites.google.com/view/peters-township-swim-dive
-Theme: Performance Excellence - Official Home of Middle School & High School Aquatics.
-
-FACILITY & HOME POOL:
-- Bud Baer Natatorium
-- Address: Peters Township High School, 121 Rolling Hills Drive, McMurray, PA 15317
+FACILITY & HOME POOL: Bud Baer Natatorium, 121 Rolling Hills Drive, McMurray, PA 15317
 `;
 
 async function getLiveDocInfo(): Promise<string> {
+  // Simplified fetch logic for brevity
   const now = Date.now();
-  if (cachedDocText && now - lastFetchTime < CACHE_TTL_MS) {
-    return cachedDocText;
-  }
+  if (cachedDocText && now - lastFetchTime < CACHE_TTL_MS) return cachedDocText;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(GOOGLE_DOC_EXPORT_URL, { signal: controller.signal });
-    clearTimeout(timeout);
+    const response = await fetch(GOOGLE_DOC_EXPORT_URL);
     if (response.ok) {
-      const text = await response.text();
-      if (text && text.trim().length > 10) {
-        cachedDocText = text.trim();
-        lastFetchTime = now;
-      }
+      cachedDocText = (await response.text()).trim();
+      lastFetchTime = now;
     }
-  } catch (err: any) {
-    console.warn('Doc fetch notice:', err?.message || err);
-  }
+  } catch (err) { console.warn('Doc fetch issue'); }
   return cachedDocText;
 }
 
 async function getLiveWebsiteInfo(): Promise<string> {
   const now = Date.now();
-  if (cachedWebsiteText && now - lastWebsiteFetchTime < WEBSITE_CACHE_TTL_MS) {
-    return cachedWebsiteText;
-  }
+  if (cachedWebsiteText && now - lastWebsiteFetchTime < WEBSITE_CACHE_TTL_MS) return cachedWebsiteText;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(OFFICIAL_WEBSITE_URL, { signal: controller.signal });
-    clearTimeout(timeout);
+    const response = await fetch(OFFICIAL_WEBSITE_URL);
     if (response.ok) {
       const html = await response.text();
-      const match = html.match(/data-code="([^"]+)"/);
-      let rawText = '';
-      if (match) {
-        const decoded = decodeHtmlEntities(match[1]);
-        rawText = decoded.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-      } else {
-        rawText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-      }
-      if (rawText && rawText.trim().length > 100) {
-        cachedWebsiteText = rawText.trim();
-        lastWebsiteFetchTime = now;
-      }
+      cachedWebsiteText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      lastWebsiteFetchTime = now;
     }
-  } catch (err: any) {
-    console.warn('Website fetch notice:', err?.message || err);
-  }
+  } catch (err) { console.warn('Website fetch issue'); }
   return cachedWebsiteText || STATIC_WEBSITE_CONTENT;
 }
 
 function buildSystemPrompt(docText: string, websiteText: string): string {
-  const officialWebsite = "Official Team Website: https://sites.google.com/view/peters-township-swim-dive";
   return `
-You are "Splash," the friendly, helpful, and versatile assistant for the Peters Township Swim and Dive Team.
+You are "Splash," the friendly, helpful assistant for the Peters Township Swim and Dive Team.
+Always refer to the team as the "Peters Township Swim and Dive Team". NEVER use "PTST" or "club".
 
-NAME & NAMING CONVENTIONS:
-- Always refer to the team as the "Peters Township Swim and Dive Team".
-- NEVER use the acronym "PTST".
-- NEVER use the word "club".
-
-REAL-TIME OFFICIAL TEAM RESOURCES & INFORMATION:
-- ${officialWebsite}
-
-=== RESOURCE 1: LIVE CONTENT FROM OFFICIAL TEAM WEBSITE ===
+=== LIVE WEBSITE DATA ===
 ${websiteText || STATIC_WEBSITE_CONTENT}
 
-=== RESOURCE 2: LIVE CONTENT FROM GOOGLE DOC GUIDE ===
+=== LIVE DOC GUIDE ===
 ${docText}
-
-TONE & PERSONALITY:
-- Warm, encouraging, helpful, and community-minded.
-- Always identify yourself as Splash, your friendly team assistant.
 `;
-}
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', app: 'Peters Township Swim and Dive Team - Splash' });
-});
-
-// Volunteer Shifts API
-app.get('/api/volunteers', (req, res) => {
-  res.json({ shifts: volunteerShifts });
-});
-
-// Helper for grounded fallback answers
-function getGroundedFallbackAnswer(query: string): string {
-  return `Splish Splash! Welcome to the Peters Township Swim and Dive Team assistant!
-• Official Team Website: https://sites.google.com/view/peters-township-swim-dive
-• Pool Address: 121 Rolling Hills Drive, McMurray, PA 15317
-• Head Coach: Alex Hardwick (alexpetersswim@gmail.com)`;
 }
 
 // Splash AI Chat Endpoint
 app.post('/api/splash/chat', async (req, res) => {
   try {
-    const { message, history, docContext } = req.body;
+    const { message, history } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message required' });
 
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'Message text is required.' });
-    }
+    const contents = Array.isArray(history) 
+      ? history.map((i: any) => ({ role: i.sender === 'user' ? 'user' : 'model', parts: [{ text: i.text }] }))
+      : [];
+    contents.push({ role: 'user', parts: [{ text: message }] });
 
-    const contents: any[] = [];
-    if (Array.isArray(history)) {
-      for (const item of history) {
-        contents.push({
-          role: item.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: item.text }],
-        });
-      }
-    }
-
-    contents.push({
-      role: 'user',
-      parts: [{ text: message }],
+    const docText = await getLiveDocInfo();
+    const webText = await getLiveWebsiteInfo();
+    
+    console.log('Attempting Google Cloud call with model: gemini-1.5-flash-002');
+    
+    // Clean, direct call with the strict versioned model name
+    const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash-002',
+      contents: contents,
+      config: {
+        systemInstruction: buildSystemPrompt(docText, webText),
+        temperature: 0.7,
+      },
     });
-
-    const liveDocText = docContext || await getLiveDocInfo();
-    const liveWebsiteText = await getLiveWebsiteInfo();
-    const systemPrompt = buildSystemPrompt(liveDocText, liveWebsiteText);
-
-    let replyText = '';
-
-    try {
-      console.log('Attempting Gemini call on AI Studio with model: gemini-1.5-flash');
-      const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: contents,
-        config: {
-          systemInstruction: systemPrompt,
-          temperature: 0.7,
-        },
-      });
-
-      if (response && response.text) {
-        replyText = response.text;
-        console.log('✅ Successfully generated AI Studio response!');
-      }
-    } catch (err: any) {
-      console.error('❌ AI Studio model call failed:', err?.message || err);
-    }
-
-    // If AI Studio fails for any reason, serve the fallback safely
-    if (!replyText) {
-      console.warn('Serving grounded fallback.');
-      replyText = getGroundedFallbackAnswer(message);
-    }
 
     return res.json({
-      reply: replyText,
-      suggestedFollowups: ['Tell me about practice groups', 'When is the next swim meet?'],
+      reply: response?.text || "Splish Splash! Something went wrong on my end.",
+      suggestedFollowups: ['When is the next meet?', 'Tell me about practice'],
     });
+
   } catch (error: any) {
-    console.error('Error generating Splash AI response:', error);
+    console.error('❌ Cloud model call failed:', error?.message || error);
     return res.json({
-      reply: getGroundedFallbackAnswer(req.body?.message || ''),
-      suggestedFollowups: ['When are tryouts?', 'What are the practice schedules?'],
+      reply: "Splish Splash! I'm having trouble connecting to the pool right now. Please check the website!",
+      suggestedFollowups: ['Try again'],
     });
   }
 });
 
-// Vite Middleware for Dev, Static Serving for Production
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(currentDir, 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
+    app.get('*', (req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🏊‍♂️ Server listening on port ${PORT}`);
-  });
+  app.listen(PORT, '0.0.0.0', () => console.log(`🏊‍♂️ Server listening on port ${PORT}`));
 }
 
 startServer();
