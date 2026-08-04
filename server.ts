@@ -11,9 +11,9 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// INITIALIZATION (SAFE SDK INSTANTIATION)
+// GOOGLE AI STUDIO INITIALIZATION (FREE TIER)
 // ============================================================================
-const ai = new GoogleGenAI({});
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 // In-memory state for volunteer shifts
 let volunteerShifts = [...INITIAL_VOLUNTEER_SHIFTS];
@@ -182,7 +182,7 @@ app.post('/api/splash/chat', async (req, res) => {
     let replyText = '';
 
     try {
-      console.log('Attempting Gemini call...');
+      console.log('Attempting Gemini call on Google AI Studio...');
       const response = await ai.models.generateContent({
         model: 'gemini-1.5-flash',
         contents: contents,
