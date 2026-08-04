@@ -13,8 +13,6 @@ const PORT = process.env.PORT || 3000;
 // ============================================================================
 // GOOGLE CLOUD VERTEX AI INITIALIZATION ($300 FREE TRIAL CREDITS)
 // ============================================================================
-// Explicitly setting vertexAI: true tells the SDK to route requests through 
-// Google Cloud Vertex AI using your GCP project ID and location.
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
   process.env.GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
 }
