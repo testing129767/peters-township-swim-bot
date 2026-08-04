@@ -181,23 +181,29 @@ app.post('/api/splash/chat', async (req, res) => {
 
     let replyText = '';
 
-    try {
-      console.log('Attempting Gemini call on Google AI Studio...');
-      const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: contents,
-        config: {
-          systemInstruction: systemPrompt,
-          temperature: 0.7,
-        },
-      });
+    // Array of model aliases to try sequentially in Google AI Studio
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash-002'];
 
-      if (response && response.text) {
-        replyText = response.text;
-        console.log('✅ Successfully generated AI Studio response!');
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(`Attempting Gemini call on Google AI Studio with model: ${modelName}`);
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: contents,
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.7,
+          },
+        });
+
+        if (response && response.text) {
+          replyText = response.text;
+          console.log(`✅ Successfully generated response using ${modelName}!`);
+          break; // Exit loop on success
+        }
+      } catch (err: any) {
+        console.warn(`Notice for model ${modelName}:`, err?.message || err);
       }
-    } catch (err: any) {
-      console.error('❌ AI Studio model call failed:', err?.message || err);
     }
 
     if (!replyText) {
