@@ -11,22 +11,9 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// GOOGLE CLOUD VERTEX AI INITIALIZATION ($300 FREE TRIAL CREDITS)
+// INITIALIZATION (SAFE SDK INSTANTIATION)
 // ============================================================================
-// If GOOGLE_APPLICATION_CREDENTIALS_JSON is provided in Render, map it 
-// so the Google Cloud SDK picks up your service account automatically.
-if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-  process.env.GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
-}
-
-// Ensure the Google Cloud project environment variable is explicitly set
-if (!process.env.GOOGLE_CLOUD_PROJECT && process.env.GCP_PROJECT) {
-  process.env.GOOGLE_CLOUD_PROJECT = process.env.GCP_PROJECT;
-}
-
-// Initialize GoogleGenAI. When running in a GCP environment with GOOGLE_APPLICATION_CREDENTIALS 
-// and GOOGLE_CLOUD_PROJECT set, the SDK automatically authenticates with Vertex AI.
-const ai = new GoogleGenAI();
+const ai = new GoogleGenAI({});
 
 // In-memory state for volunteer shifts
 let volunteerShifts = [...INITIAL_VOLUNTEER_SHIFTS];
@@ -195,7 +182,7 @@ app.post('/api/splash/chat', async (req, res) => {
     let replyText = '';
 
     try {
-      console.log('Attempting Vertex AI call via Google Cloud credentials...');
+      console.log('Attempting Gemini call...');
       const response = await ai.models.generateContent({
         model: 'gemini-1.5-flash',
         contents: contents,
@@ -207,10 +194,10 @@ app.post('/api/splash/chat', async (req, res) => {
 
       if (response && response.text) {
         replyText = response.text;
-        console.log('✅ Successfully generated Vertex AI response!');
+        console.log('✅ Successfully generated response!');
       }
     } catch (err: any) {
-      console.error('❌ Vertex AI model call failed:', err?.message || err);
+      console.error('❌ Model call failed:', err?.message || err);
     }
 
     if (!replyText) {
